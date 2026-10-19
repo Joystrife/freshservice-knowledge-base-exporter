@@ -16,6 +16,8 @@ The interface is in French. The exporter uses Freshservice REST API v2 and suppo
 - Optional Windows-user-protected storage of the Analytics URL and API key using `ConvertFrom-SecureString` / DPAPI.
 - File/path-name sanitization for Windows paths; optional XLSX index when Microsoft Excel automation is available.
 
+For complete setup and troubleshooting instructions in French, see the [French user guide](docs/USER_GUIDE_FR.md).
+
 ## Requirements
 
 - **Windows PowerShell 5.1** on Windows with Windows Forms.
