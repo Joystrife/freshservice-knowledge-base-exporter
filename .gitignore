@@ -1,0 +1,34 @@
+# Local credentials and configuration
+settings.json
+.env
+.env.*
+*.secret
+*.key
+*.pem
+.vscode/
+.idea/
+
+# Knowledge Base exports and reporting inputs
+*.csv
+*.xlsx
+*.xls
+*.json
+*.log
+*.html
+*.zip
+*.7z
+*.pdf
+*.docx
+*.png
+*.jpg
+*.jpeg
+Freshservice-KB-Export-*/
+Freshservice-KB-Report-Export-*/
+Articles/
+exports/
+output/
+
+# OS-generated files
+Thumbs.db
+Desktop.ini
+.DS_Store
