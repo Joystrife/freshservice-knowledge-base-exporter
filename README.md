@@ -4,6 +4,8 @@ A Windows PowerShell 5.1 desktop utility for exporting Freshservice **Solutions 
 
 The interface, progress dialogs, error messages and generated HTML metadata are in English. The exporter uses Freshservice REST API v2 and supports two ways to build the source article inventory.
 
+See the [v3.4.2 release notes](docs/releases/v3.4.2.md) and [changelog](CHANGELOG.md) for the verified stable baseline.
+
 ## Features
 
 - **Automatic inventory** from a scheduled Freshservice Analytics **Data Export** for the `Solutions` module.
