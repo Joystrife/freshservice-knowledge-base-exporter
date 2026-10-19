@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-# Freshservice KB Export v3.4.1: automatic Analytics inventory and SecureString-protected preferences
+# Freshservice KB Export v3.4.2: automatic Analytics inventory and SecureString-protected preferences
 
 [CmdletBinding()]
 param()
@@ -317,7 +317,7 @@ namespace FreshserviceFolderPicker {
 function Get-ExportConfiguration {
     $Settings = Read-FreshserviceSettings
     $Form = New-Object System.Windows.Forms.Form
-    $Form.Text = 'Freshservice - Knowledge Base Export v3.4.1'
+    $Form.Text = 'Freshservice - Knowledge Base Export v3.4.2'
     $Form.Size = New-Object System.Drawing.Size(790, 680)
     $Form.StartPosition = 'CenterScreen'
     $Form.FormBorderStyle = 'FixedDialog'
@@ -1658,7 +1658,7 @@ function ConvertTo-SafeFileName {
     }
 
     $SafeName = $SafeName -replace '\s+', ' '
-    $SafeName = $SafeName.Trim().TrimEnd('.')
+    $SafeName = $SafeName.Trim().TrimEnd([char[]]@(' ', '.'))
 
     if ([string]::IsNullOrWhiteSpace($SafeName)) {
         $SafeName = 'Unnamed'
@@ -1675,7 +1675,11 @@ function ConvertTo-SafeFileName {
     }
 
     if ($SafeName.Length -gt $MaxLength) {
-        $SafeName = $SafeName.Substring(0, $MaxLength).TrimEnd()
+        $SafeName = $SafeName.Substring(0, $MaxLength).TrimEnd([char[]]@(' ', '.'))
+    }
+
+    if ([string]::IsNullOrWhiteSpace($SafeName)) {
+        $SafeName = 'Unnamed'
     }
 
     return $SafeName
@@ -2155,6 +2159,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
                     ModifiedDate      = $SourceArticle.ModifiedDate
                     ReviewDate        = $SourceArticle.ReviewDate
                     ApiResult         = 'Error'
+                    FileResult        = 'NotAttempted'
                     ApiStatusCode     = Get-HttpStatusCode -Exception $_.Exception
                     ApiTitle          = $null
                     ApiStatus         = $null
@@ -2240,6 +2245,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
             -PreferredTitleLength 48 `
             -MaximumFullPathLength 240
 
+        $FileWriteError = $null
         $JsonPath = Join-Path -Path $FolderDirectory -ChildPath "$FileBaseName.json"
         $HtmlPath = Join-Path -Path $FolderDirectory -ChildPath "$FileBaseName.html"
 
@@ -2258,6 +2264,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
         }
         catch {
             $FileError = $_.Exception.Message
+            $FileWriteError = $FileError
             $ExportErrors.Add(
                 [PSCustomObject]@{
                     Level      = 'ArticleFile'
@@ -2284,6 +2291,8 @@ function Export-FreshserviceKnowledgeBaseFromReport {
             }
         )
 
+        $FileResult = if ($null -eq $FileWriteError) { 'Success' } else { 'Error' }
+
         $ArticleResults.Add(
             [PSCustomObject]@{
                 ID                = $ArticleId
@@ -2302,6 +2311,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
                 ModifiedDate      = $SourceArticle.ModifiedDate
                 ReviewDate        = $SourceArticle.ReviewDate
                 ApiResult         = 'Success'
+                FileResult        = $FileResult
                 ApiStatusCode     = 200
                 ApiTitle          = $ApiTitle
                 ApiStatus         = Get-PropertyValue -Object $Article -PropertyName 'status'
@@ -2313,7 +2323,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
                 ViewedByNames     = $SourceArticle.ViewedByNames
                 HtmlFile          = if ($null -eq $HtmlPath) { $null } else { Get-RelativeExportPath -RootPath $ExportRoot -FullPath $HtmlPath }
                 JsonFile          = if ($null -eq $JsonPath) { $null } else { Get-RelativeExportPath -RootPath $ExportRoot -FullPath $JsonPath }
-                Error             = $null
+                Error             = $FileWriteError
             }
         )
 
@@ -2341,8 +2351,10 @@ function Export-FreshserviceKnowledgeBaseFromReport {
 
     $SuccessCount = @($ArticleResults | Where-Object { $_.ApiResult -eq 'Success' }).Count
     $FailureCount = @($ArticleResults | Where-Object { $_.ApiResult -eq 'Error' }).Count
+    $FileSuccessCount = @($ArticleResults | Where-Object { $_.FileResult -eq 'Success' }).Count
+    $FileFailureCount = @($ArticleResults | Where-Object { $_.FileResult -eq 'Error' }).Count
 
-    Add-ExportLog -LogPath $LogPath -Message "Export completed. Source rows: $($SourceRows.Count), unique IDs: $($SourceArticles.Count), successful API calls: $SuccessCount, failed API calls: $FailureCount, total errors: $($ExportErrors.Count)."
+    Add-ExportLog -LogPath $LogPath -Message "Export completed. Source rows: $($SourceRows.Count), unique IDs: $($SourceArticles.Count), successful API calls: $SuccessCount, failed API calls: $FailureCount, saved article pairs (HTML + JSON): $FileSuccessCount, failed article file writes: $FileFailureCount, total errors: $($ExportErrors.Count)."
 
     $Configuration.ApiKey = $null
     $Configuration.BasicPassword = $null
@@ -2358,6 +2370,8 @@ function Export-FreshserviceKnowledgeBaseFromReport {
         FolderCount      = $Folders.Count
         SuccessCount     = $SuccessCount
         FailureCount     = $FailureCount
+        FileSuccessCount = $FileSuccessCount
+        FileFailureCount = $FileFailureCount
         ErrorCount       = $ExportErrors.Count
         XlsxCreated      = $XlsxCreated
     }
@@ -2420,7 +2434,8 @@ Reporting rows: $($Result.SourceRowCount)
 Unique IDs: $($Result.UniqueIdCount)
 Categories: $($Result.CategoryCount)
 Folders: $($Result.FolderCount)
-Articles exported: $($Result.SuccessCount)
+Successful API reads: $($Result.SuccessCount)
+Articles saved (HTML + JSON): $($Result.FileSuccessCount)
 
 $XlsxMessage
 
@@ -2438,8 +2453,10 @@ Reporting rows: $($Result.SourceRowCount)
 Unique IDs: $($Result.UniqueIdCount)
 Categories: $($Result.CategoryCount)
 Folders: $($Result.FolderCount)
-Articles exported: $($Result.SuccessCount)
-Failed articles: $($Result.FailureCount)
+Successful API reads: $($Result.SuccessCount)
+Failed API reads: $($Result.FailureCount)
+Articles saved (HTML + JSON): $($Result.FileSuccessCount)
+Failed article file writes: $($Result.FileFailureCount)
 Logged errors: $($Result.ErrorCount)
 
 $XlsxMessage
