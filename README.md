@@ -1,4 +1,4 @@
-# Freshservice Knowledge Base Exporter v3.4.1
+# Freshservice Knowledge Base Exporter v3.4.2
 
 A Windows PowerShell 5.1 desktop utility for exporting Freshservice **Solutions / Knowledge Base** articles into local, browsable HTML and structured JSON, with CSV inventories and execution logs.
 
@@ -58,7 +58,7 @@ The tool downloads the **latest available scheduled export** and then retrieves 
 
 Each run creates a dated export directory with article HTML/JSON, consolidated JSON, an index CSV, reference category/folder JSON files, and an execution log. The XLSX index is optional.
 
-The exported set is limited to article IDs present in the source inventory **and** readable with the supplied API credentials. Review the completion summary and error log.
+The exported set is limited to article IDs present in the source inventory **and** readable with the supplied API credentials. The completion summary separately reports **successful API reads** and **HTML+JSON article files actually saved**. Review any file-writing failures in the error log.
 
 ## Security
 
@@ -73,7 +73,7 @@ See [SECURITY.md](SECURITY.md) for more details.
 
 ## Compatibility notes
 
-The v3.4.1 English version preserves the validated v3.3 export engine while translating the interface, comments, error messages, and generated HTML metadata. The source was statically checked to retain the same executable tokens outside text and comments, and the UTF-8 BOM was preserved. This English edition has not yet been integration-tested on Windows PowerShell 5.1 or every Freshservice tenant.
+The v3.4.2 English version preserves the validated v3.3 export engine while translating the interface, comments, error messages, and generated HTML metadata. The source was statically checked to retain the same executable tokens outside text and comments, and the UTF-8 BOM was preserved. This English edition has not yet been integration-tested on Windows PowerShell 5.1 or every Freshservice tenant.
 
 ## References
 
