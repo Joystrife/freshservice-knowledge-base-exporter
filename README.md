@@ -4,7 +4,7 @@ A Windows PowerShell 5.1 desktop utility for exporting Freshservice **Solutions 
 
 The interface, progress dialogs, error messages and generated HTML metadata are in English. The exporter uses Freshservice REST API v2 and supports two ways to build the source article inventory.
 
-See the [v3.4.2 release notes](docs/releases/v3.4.2.md) and [changelog](CHANGELOG.md) for the verified stable baseline.
+**Latest stable release:** [v3.4.2](https://github.com/Joystrife/freshservice-knowledge-base-exporter/releases/tag/v3.4.2). See the [release notes](docs/releases/v3.4.2.md) and [changelog](CHANGELOG.md) for details.
 
 ## Features
 
@@ -62,6 +62,26 @@ Each run creates a dated export directory with article HTML/JSON, consolidated J
 
 The exported set is limited to article IDs present in the source inventory **and** readable with the supplied API credentials. The completion summary separately reports **successful API reads** and **HTML+JSON article files actually saved**. Review any file-writing failures in the error log.
 
+## Verified end-to-end test (October 19, 2026)
+
+Version **v3.4.2** completed an automatic Knowledge Base export on **Windows PowerShell 5.1** using a scheduled Freshservice Analytics inventory:
+
+| Metric | Result |
+| --- | ---: |
+| Source report rows | 1,337 |
+| Unique article IDs | 920 |
+| Categories retrieved | 21 |
+| Folders retrieved | 96 |
+| Successful article API reads | 920 / 920 |
+| Article HTML + JSON pairs saved | 920 / 920 |
+| Failed API reads | 0 |
+| Failed article file writes | 0 |
+| Logged errors | 0 |
+
+The CSV inventory was generated successfully. The optional XLSX inventory was not created because Microsoft Excel automation was unavailable on the test computer; this did not affect article exports.
+
+These results validate the tested environment and inventory only. Other Freshservice tenants may have different article counts, permissions, or configurations.
+
 ## Security
 
 **Do not commit exported Knowledge Base data or credentials to GitHub.** KB articles can include internal procedures, technical configuration, links, or other confidential data.
@@ -75,7 +95,7 @@ See [SECURITY.md](SECURITY.md) for more details.
 
 ## Compatibility notes
 
-The v3.4.2 English version preserves the validated v3.3 export engine while translating the interface, comments, error messages, and generated HTML metadata. The source was statically checked to retain the same executable tokens outside text and comments, and the UTF-8 BOM was preserved. This English edition has not yet been integration-tested on Windows PowerShell 5.1 or every Freshservice tenant.
+The **English-language v3.4.2 edition was successfully tested end to end on Windows PowerShell 5.1**, including automatic Analytics inventory retrieval, 920 article API reads, and saving 920 HTML + JSON article pairs. The script retains **UTF-8 with BOM** encoding for Windows PowerShell 5.1 compatibility. Testing on one tenant does not guarantee identical behavior across every Freshservice environment.
 
 ## References
 
