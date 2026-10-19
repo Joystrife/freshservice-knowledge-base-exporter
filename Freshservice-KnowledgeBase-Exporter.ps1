@@ -2118,7 +2118,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
 
         Update-ProgressWindow `
             -ProgressWindow $ProgressWindow `
-            -Message "Article $ArticleNumber/$($SourceArticles.Count)`r`nID : $ArticleId — $($SourceArticle.Title)"
+            -Message "Article $ArticleNumber/$($SourceArticles.Count)`r`nID : $ArticleId - $($SourceArticle.Title)"
 
         try {
             $DetailResponse = Invoke-FreshserviceGet -Uri "$ApiBase/articles/$ArticleId" -Headers $Headers
