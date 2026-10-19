@@ -1,8 +1,8 @@
-# Freshservice Knowledge Base Exporter
+# Freshservice Knowledge Base Exporter v3.4
 
 A Windows PowerShell 5.1 desktop utility for exporting Freshservice **Solutions / Knowledge Base** articles into local, browsable HTML and structured JSON, with CSV inventories and execution logs.
 
-The interface is in French. The exporter uses Freshservice REST API v2 and supports two ways to build the source article inventory.
+The interface, progress dialogs, error messages and generated HTML metadata are in English. The exporter uses Freshservice REST API v2 and supports two ways to build the source article inventory.
 
 ## Features
 
@@ -16,7 +16,7 @@ The interface is in French. The exporter uses Freshservice REST API v2 and suppo
 - Optional Windows-user-protected storage of the Analytics URL and API key using `ConvertFrom-SecureString` / DPAPI.
 - File/path-name sanitization for Windows paths; optional XLSX index when Microsoft Excel automation is available.
 
-For complete setup and troubleshooting instructions in French, see the [French user guide](docs/USER_GUIDE_FR.md).
+For complete setup and troubleshooting instructions, see the [English user guide](docs/USER_GUIDE.md).
 
 ## Requirements
 
@@ -38,7 +38,7 @@ For complete setup and troubleshooting instructions in French, see the [French u
 
 4. Enter your Freshservice domain (for example `yourcompany.freshservice.com`) and API key. The Basic Auth password field uses the placeholder `X`; do not enter your personal password.
 5. Choose **Automatic** (scheduled Analytics API export URL) or **Manual** (reporting CSV/XLSX).
-6. Choose an export destination and click **Lancer l'export**.
+6. Choose an export destination and click **Start export**.
 
 An organization may require an approved execution policy or additional permissions. Follow your organization's security policies.
 
@@ -73,7 +73,7 @@ See [SECURITY.md](SECURITY.md) for more details.
 
 ## Compatibility notes
 
-The underlying v3.3 export engine was used successfully on Windows PowerShell 5.1. This public copy replaces environment-specific labels and the default domain with generic values; it has not been separately integration-tested against every Freshservice tenant.
+The v3.4 English version preserves the validated v3.3 export engine while translating the interface, comments, error messages, and generated HTML metadata. The source was statically checked to retain the same executable tokens outside text and comments, and the UTF-8 BOM was preserved. This English edition has not yet been integration-tested on Windows PowerShell 5.1 or every Freshservice tenant.
 
 ## References
 
