@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-# Freshservice KB Export v3.3: mode Analytics automatique + preferences chiffrées via SecureString
+# Freshservice KB Export v3.4: automatic Analytics inventory and SecureString-protected preferences
 
 [CmdletBinding()]
 param()
@@ -16,7 +16,7 @@ Add-Type -AssemblyName System.Drawing
 $script:CurrentExportRoot = $null
 
 # -----------------------------------------------------------------------------
-# Interface graphique
+# Graphical user interface
 # -----------------------------------------------------------------------------
 
 function Show-InformationMessage {
@@ -56,7 +56,7 @@ function Show-ErrorMessage {
         [Parameter(Mandatory)]
         [string]$Message,
 
-        [string]$Title = "Erreur pendant l'export Freshservice"
+        [string]$Title = "Freshservice export error"
     )
 
     [System.Windows.Forms.MessageBox]::Show(
@@ -80,8 +80,8 @@ function Normalize-FreshserviceDomain {
     return $Normalized
 }
 
-# Parametres utilisateurs sans secret en clair.
-# Les valeurs sensibles sont protegees par ConvertFrom-SecureString (DPAPI Windows CurrentUser).
+# User preferences without plaintext secrets.
+# Sensitive values are protected by ConvertFrom-SecureString (Windows DPAPI, current user).
 function Get-FreshserviceSettingsPath {
     $Base = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Freshservice\KnowledgeBaseExport'
     if (-not (Test-Path -LiteralPath $Base -PathType Container)) {
@@ -94,14 +94,14 @@ function Protect-SettingString {
     param([string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
 
-    # Windows PowerShell : ConvertFrom-SecureString sans -Key utilise DPAPI
-    # avec le contexte du compte Windows courant, sans assembly .NET externe.
+    # Windows PowerShell: ConvertFrom-SecureString without -Key uses DPAPI
+    # under the current Windows account without an external .NET assembly.
     $SecureValue = $null
     try {
         $SecureValue = ConvertTo-SecureString -String $Value -AsPlainText -Force -ErrorAction Stop
         $EncryptedValue = ConvertFrom-SecureString -SecureString $SecureValue -ErrorAction Stop
         if ([string]::IsNullOrWhiteSpace($EncryptedValue)) {
-            throw 'La protection Windows a retourne une valeur vide.'
+            throw 'Windows protection returned an empty value.'
         }
         return ('PSDPAPI:' + $EncryptedValue)
     }
@@ -114,8 +114,8 @@ function Unprotect-SettingString {
     param([string]$EncryptedValue)
     if ([string]::IsNullOrWhiteSpace($EncryptedValue)) { return '' }
 
-    # Seul le format cree par cette version est relu. Les anciennes tentatives
-    # ayant echoue ne sont pas interpretees comme des secrets valides.
+    # Only the settings format created by this version is supported. Older attempts
+    # that failed are not treated as valid secrets.
     if (-not $EncryptedValue.StartsWith('PSDPAPI:', [StringComparison]::Ordinal)) {
         return ''
     }
@@ -129,7 +129,7 @@ function Unprotect-SettingString {
         return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Bstr)
     }
     catch {
-        return '' # Autre profil Windows, valeur endommagee ou indisponible.
+        return '' # Different Windows profile, corrupted value, or unavailable value.
     }
     finally {
         if ($Bstr -ne [IntPtr]::Zero) {
@@ -140,7 +140,7 @@ function Unprotect-SettingString {
 }
 
 function Read-FreshserviceSettings {
-    # La lecture ne doit jamais tenter de creer un dossier : utile sur les postes geres.
+    # Reading settings must never create a folder: important on managed devices.
     $Base = [Environment]::GetFolderPath('LocalApplicationData')
     if ([string]::IsNullOrWhiteSpace($Base)) { return $null }
     $Path = Join-Path $Base 'Freshservice\KnowledgeBaseExport\settings.json'
@@ -161,11 +161,11 @@ function Save-FreshserviceSettings {
     if ($Configuration.RememberConfiguration) {
         if (-not [string]::IsNullOrWhiteSpace($Configuration.AutomaticUrl)) {
             try { $SaveUrl = Protect-SettingString -Value $Configuration.AutomaticUrl }
-            catch { $Warnings.Add('URL Analytics non memorisee : ' + $_.Exception.Message) }
+            catch { $Warnings.Add('Analytics URL could not be saved: ' + $_.Exception.Message) }
         }
         if ($Configuration.RememberApiKey) {
             try { $SaveApiKey = Protect-SettingString -Value $Configuration.ApiKey }
-            catch { $Warnings.Add('Cle API non memorisee : ' + $_.Exception.Message) }
+            catch { $Warnings.Add('API key could not be saved: ' + $_.Exception.Message) }
         }
     }
     $Data = [ordered]@{
@@ -180,12 +180,12 @@ function Save-FreshserviceSettings {
     }
     $Path = Get-FreshserviceSettingsPath
     $Data | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction Stop
-    # Les preferences ordinaires restent enregistrees meme si DPAPI est indisponible.
+    # Non-sensitive preferences are saved even when DPAPI is unavailable.
     return $Warnings.ToArray()
 }
 
 function Clear-FreshserviceSettings {
-    # En desactivant la memorisation, supprimer aussi une ancienne sauvegarde.
+    # Disabling saved preferences also clears any previous settings.
     $Base = [Environment]::GetFolderPath('LocalApplicationData')
     if ([string]::IsNullOrWhiteSpace($Base)) { return }
     $Path = Join-Path $Base 'Freshservice\KnowledgeBaseExport\settings.json'
@@ -199,13 +199,13 @@ function Test-AutomaticExportUrl {
     $UriObject = $null
     if (-not [Uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$UriObject)) { return $false }
     if ($UriObject.Scheme -ne 'https' -or -not [string]::IsNullOrWhiteSpace($UriObject.UserInfo)) { return $false }
-    # Ne pas transmettre la cle API a une URL hors du tenant configure.
+    # Never send the API key to a URL outside the configured tenant.
     return ($UriObject.Host -ieq $ExpectedDomain)
 }
 
-# Fenetre moderne de selection de dossiers (Explorateur Windows).
-# Windows PowerShell 5.1 utilise par defaut l'ancien FolderBrowserDialog.
-# IFileDialog + FOS_PICKFOLDERS ouvre le selecteur moderne Windows 10/11.
+# Modern Windows Explorer folder-selection dialog.
+# Windows PowerShell 5.1 otherwise defaults to the legacy FolderBrowserDialog.
+# IFileDialog + FOS_PICKFOLDERS opens the modern Windows 10/11 picker.
 function Select-ModernExportFolder {
     param(
         [Parameter(Mandatory)][string]$Title,
@@ -280,14 +280,14 @@ namespace FreshserviceFolderPicker {
                 // FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST
                 dialog.SetOptions(options | 0x00000020 | 0x00000040 | 0x00000800);
                 dialog.SetTitle(title);
-                dialog.SetOkButtonLabel("Selectionner ce dossier");
+                dialog.SetOkButtonLabel("Select this folder");
                 if (!String.IsNullOrEmpty(initialFolder) &&
                     System.IO.Directory.Exists(initialFolder)) {
                     try {
                         Guid riid = typeof(IShellItem).GUID;
                         SHCreateItemFromParsingName(initialFolder, IntPtr.Zero, ref riid, out initialItem);
                         if (initialItem != null) dialog.SetFolder(initialItem);
-                    } catch (COMException) { /* Le navigateur choisira son dossier initial. */ }
+                    } catch (COMException) { /* Let the dialog choose its own initial folder. */ }
                 }
                 int result = dialog.Show(owner);
                 // HRESULT_FROM_WIN32(ERROR_CANCELLED)
@@ -317,7 +317,7 @@ namespace FreshserviceFolderPicker {
 function Get-ExportConfiguration {
     $Settings = Read-FreshserviceSettings
     $Form = New-Object System.Windows.Forms.Form
-    $Form.Text = 'Freshservice - Knowledge Base Export v3.3'
+    $Form.Text = 'Freshservice - Knowledge Base Export v3.4'
     $Form.Size = New-Object System.Drawing.Size(790, 680)
     $Form.StartPosition = 'CenterScreen'
     $Form.FormBorderStyle = 'FixedDialog'
@@ -327,20 +327,20 @@ function Get-ExportConfiguration {
     $Form.TopMost = $true
 
     $Title = New-Object System.Windows.Forms.Label
-    $Title.Text = 'Export de la Knowledge Base Freshservice'
+    $Title.Text = 'Freshservice Knowledge Base Export'
     $Title.Font = New-Object System.Drawing.Font('Segoe UI', 13, [System.Drawing.FontStyle]::Bold)
     $Title.Location = New-Object System.Drawing.Point(22, 18)
     $Title.Size = New-Object System.Drawing.Size(730, 30)
     $Form.Controls.Add($Title)
 
     $Intro = New-Object System.Windows.Forms.Label
-    $Intro.Text = "Export des articles par API. Choisir le fichier de reporting ou configurer un export Analytics planifie."
+    $Intro.Text = "Export articles via API. Select a reporting file or use a scheduled Analytics export."
     $Intro.Location = New-Object System.Drawing.Point(24, 57)
     $Intro.Size = New-Object System.Drawing.Size(710, 32)
     $Form.Controls.Add($Intro)
 
     $DomainLabel = New-Object System.Windows.Forms.Label
-    $DomainLabel.Text = 'Domaine Freshservice :'
+    $DomainLabel.Text = 'Freshservice domain:'
     $DomainLabel.Location = New-Object System.Drawing.Point(24, 103)
     $DomainLabel.Size = New-Object System.Drawing.Size(205, 24)
     $Form.Controls.Add($DomainLabel)
@@ -353,7 +353,7 @@ function Get-ExportConfiguration {
     $Form.Controls.Add($DomainTextBox)
 
     $ApiKeyLabel = New-Object System.Windows.Forms.Label
-    $ApiKeyLabel.Text = 'Cle API Freshservice :'
+    $ApiKeyLabel.Text = 'Freshservice API key:'
     $ApiKeyLabel.Location = New-Object System.Drawing.Point(24, 144)
     $ApiKeyLabel.Size = New-Object System.Drawing.Size(205, 24)
     $Form.Controls.Add($ApiKeyLabel)
@@ -368,7 +368,7 @@ function Get-ExportConfiguration {
     $Form.Controls.Add($ApiKeyTextBox)
 
     $PasswordLabel = New-Object System.Windows.Forms.Label
-    $PasswordLabel.Text = 'Basic Auth (valeur fictive) :'
+    $PasswordLabel.Text = 'Basic Auth (placeholder):'
     $PasswordLabel.Location = New-Object System.Drawing.Point(24, 185)
     $PasswordLabel.Size = New-Object System.Drawing.Size(205, 24)
     $Form.Controls.Add($PasswordLabel)
@@ -380,20 +380,20 @@ function Get-ExportConfiguration {
     $Form.Controls.Add($PasswordTextBox)
 
     $AutoRadio = New-Object System.Windows.Forms.RadioButton
-    $AutoRadio.Text = 'Automatique - inventaire Analytics (recommande)'
+    $AutoRadio.Text = 'Automatic - Analytics inventory (recommended)'
     $AutoRadio.Location = New-Object System.Drawing.Point(235, 225)
     $AutoRadio.Size = New-Object System.Drawing.Size(500, 26)
     $Form.Controls.Add($AutoRadio)
 
     $ManualRadio = New-Object System.Windows.Forms.RadioButton
-    $ManualRadio.Text = 'Manuel - choisir un fichier CSV ou XLSX'
+    $ManualRadio.Text = 'Manual - select a CSV or XLSX file'
     $ManualRadio.Location = New-Object System.Drawing.Point(235, 252)
     $ManualRadio.Size = New-Object System.Drawing.Size(500, 26)
     $Form.Controls.Add($ManualRadio)
 
-    # Le mode automatique est restaure uniquement si l'URL sauvegardee est decryptable.
-    # La configuration automatique ne doit jamais etre activee par defaut
-    # sans URL d'export precedemment enregistree et decryptable.
+    # Automatic mode is restored only when its saved URL can be decrypted.
+    # Never select automatic mode by default
+    # unless a previously saved export URL can be decrypted.
     $SavedAutomaticUrl = ''
     if ($null -ne $Settings -and $Settings.AutomaticUrlEncrypted) {
         $SavedAutomaticUrl = Unprotect-SettingString -EncryptedValue ([string]$Settings.AutomaticUrlEncrypted)
@@ -405,7 +405,7 @@ function Get-ExportConfiguration {
     else { $ManualRadio.Checked = $true }
 
     $UrlLabel = New-Object System.Windows.Forms.Label
-    $UrlLabel.Text = "URL d'export Analytics :"
+    $UrlLabel.Text = "Analytics export URL:"
     $UrlLabel.Location = New-Object System.Drawing.Point(24, 301)
     $UrlLabel.Size = New-Object System.Drawing.Size(205, 24)
     $Form.Controls.Add($UrlLabel)
@@ -418,14 +418,14 @@ function Get-ExportConfiguration {
     $Form.Controls.Add($UrlTextBox)
 
     $Info = New-Object System.Windows.Forms.Label
-    $Info.Text = 'URL du Data Export Solutions programme : Analytics > Settings > Data Export. La liste des ID est recuperee automatiquement.'
+    $Info.Text = 'Scheduled Solutions Data Export URL: Analytics > Settings > Data Export. The article ID list is retrieved automatically.'
     $Info.Location = New-Object System.Drawing.Point(235, 327)
     $Info.Size = New-Object System.Drawing.Size(510, 40)
     $Info.ForeColor = [System.Drawing.Color]::DimGray
     $Form.Controls.Add($Info)
 
     $SourceFileLabel = New-Object System.Windows.Forms.Label
-    $SourceFileLabel.Text = 'Reporting CSV ou XLSX :'
+    $SourceFileLabel.Text = 'Reporting CSV or XLSX:'
     $SourceFileLabel.Location = New-Object System.Drawing.Point(24, 372)
     $SourceFileLabel.Size = New-Object System.Drawing.Size(205, 24)
     $Form.Controls.Add($SourceFileLabel)
@@ -437,14 +437,14 @@ function Get-ExportConfiguration {
     $Form.Controls.Add($SourceFileTextBox)
 
     $BrowseSourceButton = New-Object System.Windows.Forms.Button
-    $BrowseSourceButton.Text = 'Parcourir...'
+    $BrowseSourceButton.Text = 'Browse...'
     $BrowseSourceButton.Location = New-Object System.Drawing.Point(637, 367)
     $BrowseSourceButton.Size = New-Object System.Drawing.Size(98, 30)
     $Form.Controls.Add($BrowseSourceButton)
     $BrowseSourceButton.Add_Click({
         $FileDialog = New-Object System.Windows.Forms.OpenFileDialog
-        $FileDialog.Title = 'Selectionner le fichier reporting Freshservice (CSV ou XLSX)'
-        $FileDialog.Filter = 'Fichiers CSV ou Excel (*.csv;*.xlsx)|*.csv;*.xlsx'
+        $FileDialog.Title = 'Select Freshservice reporting file (CSV or XLSX)'
+        $FileDialog.Filter = 'CSV or Excel files (*.csv;*.xlsx)|*.csv;*.xlsx'
         $FileDialog.CheckFileExists = $true
         $FileDialog.AutoUpgradeEnabled = $true
         if ($FileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
@@ -454,7 +454,7 @@ function Get-ExportConfiguration {
     })
 
     $ExportPathLabel = New-Object System.Windows.Forms.Label
-    $ExportPathLabel.Text = "Dossier d'enregistrement :"
+    $ExportPathLabel.Text = "Export destination:"
     $ExportPathLabel.Location = New-Object System.Drawing.Point(24, 421)
     $ExportPathLabel.Size = New-Object System.Drawing.Size(205, 24)
     $Form.Controls.Add($ExportPathLabel)
@@ -475,26 +475,26 @@ function Get-ExportConfiguration {
     $Form.Controls.Add($ExportPathTextBox)
 
     $BrowseExportButton = New-Object System.Windows.Forms.Button
-    $BrowseExportButton.Text = 'Parcourir...'
+    $BrowseExportButton.Text = 'Browse...'
     $BrowseExportButton.Location = New-Object System.Drawing.Point(637, 416)
     $BrowseExportButton.Size = New-Object System.Drawing.Size(98, 30)
     $Form.Controls.Add($BrowseExportButton)
     $BrowseExportButton.Add_Click({
         try {
-            $SelectedFolder = Select-ModernExportFolder -Title 'Selectionner le dossier de destination Freshservice KB' `
+            $SelectedFolder = Select-ModernExportFolder -Title 'Select Freshservice KB export destination' `
                 -InitialFolder $ExportPathTextBox.Text -Owner $Form
             if (-not [string]::IsNullOrWhiteSpace($SelectedFolder)) {
                 $ExportPathTextBox.Text = $SelectedFolder
             }
         }
         catch {
-            Show-WarningMessage -Title 'Selection du dossier indisponible' `
-                -Message ("Impossible d'ouvrir le navigateur de dossiers Windows.`r`n" + $_.Exception.Message)
+            Show-WarningMessage -Title 'Folder selection unavailable' `
+                -Message ("Unable to open the Windows folder picker.`r`n" + $_.Exception.Message)
         }
     })
 
     $OpenFolderCheckBox = New-Object System.Windows.Forms.CheckBox
-    $OpenFolderCheckBox.Text = "Ouvrir le dossier d'export a la fin"
+    $OpenFolderCheckBox.Text = "Open export folder when finished"
     $OpenFolderCheckBox.Location = New-Object System.Drawing.Point(235, 460)
     $OpenFolderCheckBox.Size = New-Object System.Drawing.Size(340, 24)
     $OpenFolderCheckBox.Checked = $true
@@ -504,7 +504,7 @@ function Get-ExportConfiguration {
     $Form.Controls.Add($OpenFolderCheckBox)
 
     $RememberCheckBox = New-Object System.Windows.Forms.CheckBox
-    $RememberCheckBox.Text = "Memoriser les preferences et l'URL optionnelle (protection Windows)"
+    $RememberCheckBox.Text = "Remember preferences and optional URL (Windows protection)"
     $RememberCheckBox.Location = New-Object System.Drawing.Point(235, 490)
     $RememberCheckBox.Size = New-Object System.Drawing.Size(500, 24)
     $RememberCheckBox.Checked = $true
@@ -514,7 +514,7 @@ function Get-ExportConfiguration {
     $Form.Controls.Add($RememberCheckBox)
 
     $RememberKeyCheckBox = New-Object System.Windows.Forms.CheckBox
-    $RememberKeyCheckBox.Text = 'Memoriser aussi la cle API sur ce poste (protection Windows)'
+    $RememberKeyCheckBox.Text = 'Also remember the API key on this computer (Windows protection)'
     $RememberKeyCheckBox.Location = New-Object System.Drawing.Point(235, 518)
     $RememberKeyCheckBox.Size = New-Object System.Drawing.Size(500, 24)
     $RememberKeyCheckBox.Checked = $false
@@ -523,8 +523,8 @@ function Get-ExportConfiguration {
     }
     $Form.Controls.Add($RememberKeyCheckBox)
 
-    # Seuls les champs correspondant au mode choisi sont affiches.
-    # Le mode manuel ne demande donc jamais d'URL Analytics.
+    # Display only the fields required by the selected mode.
+    # Manual mode never requires an Analytics URL.
     $RefreshSourceControls = {
         $IsAuto = $AutoRadio.Checked
         $UrlLabel.Visible = $IsAuto
@@ -533,10 +533,10 @@ function Get-ExportConfiguration {
         $SourceFileTextBox.Visible = -not $IsAuto
         $BrowseSourceButton.Visible = -not $IsAuto
         if ($IsAuto) {
-            $Info.Text = "Option avancee : coller l'URL du Data Export Freshservice planifie (si les articles KB sont proposes dans le module)."
+            $Info.Text = "Paste the API URL of your scheduled Freshservice Solutions Data Export."
         }
         else {
-            $Info.Text = "Mode operationnel valide : selectionner le reporting Knowledge Base au format CSV ou XLSX. Aucune URL Analytics necessaire."
+            $Info.Text = "Select a Knowledge Base reporting file in CSV or XLSX format. No Analytics URL is required."
         }
     }
     $AutoRadio.Add_CheckedChanged($RefreshSourceControls)
@@ -544,14 +544,14 @@ function Get-ExportConfiguration {
     & $RefreshSourceControls
 
     $StartButton = New-Object System.Windows.Forms.Button
-    $StartButton.Text = "Lancer l'export"
+    $StartButton.Text = "Start export"
     $StartButton.Location = New-Object System.Drawing.Point(480, 570)
     $StartButton.Size = New-Object System.Drawing.Size(145, 36)
     $StartButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
     $Form.Controls.Add($StartButton)
 
     $CancelButton = New-Object System.Windows.Forms.Button
-    $CancelButton.Text = 'Annuler'
+    $CancelButton.Text = 'Cancel'
     $CancelButton.Location = New-Object System.Drawing.Point(637, 570)
     $CancelButton.Size = New-Object System.Drawing.Size(98, 36)
     $CancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
@@ -577,46 +577,46 @@ function Get-ExportConfiguration {
         $ExportPath = $ExportPathTextBox.Text.Trim()
 
         $Missing = New-Object 'System.Collections.Generic.List[string]'
-        if (-not $DomainRaw) { $Missing.Add('Domaine Freshservice') }
-        if (-not $ApiKey) { $Missing.Add('Cle API Freshservice') }
+        if (-not $DomainRaw) { $Missing.Add('Freshservice domain') }
+        if (-not $ApiKey) { $Missing.Add('Freshservice API key') }
         if (-not $BasicPassword) { $Missing.Add('Basic Auth') }
-        if ($SourceMode -eq 'Automatic' -and -not $AutoUrl) { $Missing.Add("URL d'export Analytics (uniquement en mode automatique)") }
-        if ($SourceMode -eq 'Manual' -and -not $SourceFile) { $Missing.Add('Fichier reporting CSV ou XLSX') }
-        if (-not $ExportPath) { $Missing.Add("Dossier d'enregistrement") }
+        if ($SourceMode -eq 'Automatic' -and -not $AutoUrl) { $Missing.Add("Analytics export URL (automatic mode only)") }
+        if ($SourceMode -eq 'Manual' -and -not $SourceFile) { $Missing.Add('Reporting CSV or XLSX file') }
+        if (-not $ExportPath) { $Missing.Add("Export destination") }
 
         if ($Missing.Count -gt 0) {
             $MissingText = ($Missing.ToArray() | ForEach-Object { '- ' + $_ }) -join "`r`n"
-            Show-WarningMessage -Title 'Champs obligatoires manquants' -Message "Tous les champs obligatoires doivent etre renseignes.`r`n`r`n$MissingText"
+            Show-WarningMessage -Title 'Missing required fields' -Message "All required fields must be completed.`r`n`r`n$MissingText"
             continue
         }
 
         $Domain = Normalize-FreshserviceDomain -Domain $DomainRaw
         if ($Domain -notmatch '^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') {
-            Show-WarningMessage -Title 'Domaine incorrect' -Message 'Exemple de domaine attendu : yourcompany.freshservice.com'
+            Show-WarningMessage -Title 'Invalid domain' -Message 'Expected domain format: yourcompany.freshservice.com'
             continue
         }
         if ($SourceMode -eq 'Automatic') {
             if (-not (Test-AutomaticExportUrl -Url $AutoUrl -ExpectedDomain $Domain)) {
-                Show-WarningMessage -Title 'URL Analytics incorrecte' -Message "L'URL doit etre HTTPS et appartenir au domaine Freshservice configure.`r`nElle doit etre l'URL API de Data Exports, et non l'adresse de la page du reporting."
+                Show-WarningMessage -Title 'Invalid Analytics URL' -Message "The URL must use HTTPS and belong to the configured Freshservice domain.`r`nUse the Data Exports API URL, not the reporting page URL."
                 continue
             }
         }
         else {
             if (-not (Test-Path -LiteralPath $SourceFile -PathType Leaf)) {
-                Show-WarningMessage -Title 'Fichier introuvable' -Message "Fichier reporting inaccessible :`r`n$SourceFile"
+                Show-WarningMessage -Title 'File not found' -Message "Reporting file could not be accessed:`r`n$SourceFile"
                 continue
             }
             if ([IO.Path]::GetExtension($SourceFile).ToLowerInvariant() -notin @('.csv','.xlsx')) {
-                Show-WarningMessage -Title 'Format incorrect' -Message 'Un fichier CSV ou XLSX est requis.'
+                Show-WarningMessage -Title 'Invalid file format' -Message 'A CSV or XLSX file is required.'
                 continue
             }
         }
         if (-not (Test-Path -LiteralPath $ExportPath -PathType Container)) {
-            Show-WarningMessage -Title 'Dossier incorrect' -Message "Dossier de destination introuvable :`r`n$ExportPath"
+            Show-WarningMessage -Title 'Invalid destination folder' -Message "Destination folder not found:`r`n$ExportPath"
             continue
         }
         if ($ExportPath.Length -gt 120) {
-            Show-WarningMessage -Title 'Chemin trop long' -Message 'Choisir un dossier de destination plus court, par exemple dans votre profil Windows.'
+            Show-WarningMessage -Title 'Path too long' -Message 'Choose a shorter export destination, for example inside your Windows user profile.'
             continue
         }
         $Configuration = [PSCustomObject]@{
@@ -638,7 +638,7 @@ function Get-ExportConfiguration {
 
 function New-ProgressWindow {
     $Form = New-Object System.Windows.Forms.Form
-    $Form.Text = 'Export Freshservice en cours'
+    $Form.Text = 'Freshservice export in progress'
     $Form.Size = New-Object System.Drawing.Size(650, 185)
     $Form.StartPosition = 'CenterScreen'
     $Form.FormBorderStyle = 'FixedDialog'
@@ -649,7 +649,7 @@ function New-ProgressWindow {
     $Form.TopMost = $true
 
     $Label = New-Object System.Windows.Forms.Label
-    $Label.Text = "Initialisation de l'export..."
+    $Label.Text = "Initializing export..."
     $Label.Location = New-Object System.Drawing.Point(22, 22)
     $Label.Size = New-Object System.Drawing.Size(595, 62)
     $Label.Font = New-Object System.Drawing.Font('Segoe UI', 10)
@@ -701,7 +701,7 @@ function Close-ProgressWindow {
 }
 
 # -----------------------------------------------------------------------------
-# Fonctions API
+# API functions
 # -----------------------------------------------------------------------------
 
 function Get-PropertyValue {
@@ -813,11 +813,11 @@ function Invoke-FreshserviceGet {
             }
 
             $StatusText = if ($null -eq $StatusCode) { 'inconnu' } else { [string]$StatusCode }
-            throw "Erreur HTTP $StatusText lors de l'appel GET : $Uri`r`n$($_.Exception.Message)"
+            throw "HTTP $StatusText error during GET request: $Uri`r`n$($_.Exception.Message)"
         }
     }
 
-    throw "Nombre maximal de tentatives atteint pour : $Uri"
+    throw "Maximum retry attempts reached for: $Uri"
 }
 
 function Get-ResponseCollection {
@@ -869,7 +869,7 @@ function Get-FreshservicePagedCollection {
         $Separator = if ($BaseUri.Contains('?')) { '&' } else { '?' }
         $Uri = "$BaseUri${Separator}page=$Page&per_page=$PerPage"
 
-        Update-ProgressWindow -ProgressWindow $ProgressWindow -Message "Lecture de la page $Page...`r`n$BaseUri"
+        Update-ProgressWindow -ProgressWindow $ProgressWindow -Message "Reading page $Page...`r`n$BaseUri"
 
         $Response = Invoke-FreshserviceGet -Uri $Uri -Headers $Headers
         $Items = @(Get-ResponseCollection -Response $Response -PropertyName $CollectionProperty)
@@ -904,21 +904,21 @@ function Get-ArticleObject {
 }
 
 # -----------------------------------------------------------------------------
-# Acquisition automatique de l'inventaire via Analytics Data Exports
+# Automatic inventory acquisition via Analytics Data Exports
 # -----------------------------------------------------------------------------
 
 function Assert-TrustedDownloadUri {
     param([Parameter(Mandatory)][string]$Url)
     $Parsed = $null
     if (-not [Uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$Parsed) -or $Parsed.Scheme -ne 'https') {
-        throw 'Le lien de telechargement du reporting est invalide : HTTPS est obligatoire.'
+        throw 'Invalid reporting download link: HTTPS is required.'
     }
     $HostName = $Parsed.Host.ToLowerInvariant()
     $Suffixes = @('freshservice.com','freshworks.com','amazonaws.com','cloudfront.net')
     foreach ($Suffix in $Suffixes) {
         if ($HostName -eq $Suffix -or $HostName.EndsWith('.' + $Suffix)) { return }
     }
-    throw "Le domaine de telechargement $HostName n'est pas reconnu. Aucun secret ne sera envoye vers ce domaine."
+    throw "Unrecognized download domain $HostName. No credentials will be sent to this domain."
 }
 
 function Invoke-InventoryWebDownload {
@@ -942,9 +942,9 @@ function Invoke-InventoryWebDownload {
                 Start-Sleep -Seconds $Pause
                 continue
             }
-            # Les URLs d'export peuvent contenir un jeton d'acces : ne pas afficher la chaine.
+            # Export URLs may contain access tokens: do not log the URL.
             $Detail = if ($Status) { "HTTP $Status" } else { $_.Exception.GetType().Name }
-            throw "L'inventaire Analytics n'a pas pu etre telecharge ($Detail). Verifier la configuration Data Exports, l'acces et la date du dernier export. Le mode Manuel reste disponible."
+            throw "Unable to download Analytics inventory ($Detail). Check the Data Export configuration, access rights, and latest export time. Manual mode remains available."
         }
     }
 }
@@ -957,20 +957,20 @@ function Get-AutomaticReportSource {
         [Parameter(Mandatory)]$ProgressWindow
     )
     $RawFile = Join-Path $ExportRoot '_inventory_download.tmp'
-    Update-ProgressWindow -ProgressWindow $ProgressWindow -Message "Recuperation du dernier inventaire depuis Analytics..."
+    Update-ProgressWindow -ProgressWindow $ProgressWindow -Message "Downloading latest inventory from Analytics..."
     Invoke-InventoryWebDownload -Url $Configuration.AutomaticUrl -OutputFile $RawFile -Headers $Headers
 
     for ($Hop = 0; $Hop -lt 3; $Hop++) {
         $Data = [IO.File]::ReadAllBytes($RawFile)
-        if ($Data.Length -eq 0) { throw "L'URL API Analytics a renvoye un fichier vide." }
-        if ($Data.Length -gt 52428800) { throw 'Inventaire superieur a 50 Mo : controle manuel requis.' }
+        if ($Data.Length -eq 0) { throw "The Analytics API URL returned an empty file." }
+        if ($Data.Length -gt 52428800) { throw 'Inventory exceeds 50 MB: manual review required.' }
 
-        # La route Analytics peut retourner un objet JSON pointant vers le CSV.
+        # Analytics may return a JSON object pointing to the CSV.
         $FirstText = [Text.Encoding]::UTF8.GetString($Data, 0, [Math]::Min(400, $Data.Length)).TrimStart([char[]]@([char]0xFEFF, [char]32, [char]13, [char]10, [char]9))
         if ($FirstText.StartsWith('{')) {
             $Payload = $null
             try { $Payload = [Text.Encoding]::UTF8.GetString($Data) | ConvertFrom-Json }
-            catch { throw "Le contenu de l'export Analytics n'est pas un JSON lisible." }
+            catch { throw "The Analytics export response is not valid JSON." }
             $Link = $null
             $ExportObject = Get-PropertyValue -Object $Payload -PropertyName 'export'
             $DataObject = Get-PropertyValue -Object $Payload -PropertyName 'data'
@@ -982,10 +982,10 @@ function Get-AutomaticReportSource {
             elseif ($DirectLink) { $Link = [string]$DirectLink }
             elseif ($GeneralLink) { $Link = [string]$GeneralLink }
             elseif ($DataLink) { $Link = [string]$DataLink }
-            if (-not $Link) { throw "L'API Analytics ne retourne ni un fichier CSV/XLSX ni une URL de telechargement exploitable." }
+            if (-not $Link) { throw "The Analytics API returned neither a CSV/XLSX file nor a usable download URL." }
             Assert-TrustedDownloadUri -Url $Link
             $LinkUri = [Uri]$Link
-            # Aucun header d'authentification sur une URL signee tierce.
+            # Do not send authentication headers to a signed third-party URL.
             $FollowHeaders = @{}
             if ($LinkUri.Host -ieq $Configuration.Domain) { $FollowHeaders = $Headers }
             Invoke-InventoryWebDownload -Url $Link -OutputFile $RawFile -Headers $FollowHeaders
@@ -994,10 +994,10 @@ function Get-AutomaticReportSource {
         break
     }
     $Data = [IO.File]::ReadAllBytes($RawFile)
-    if ($Data.Length -lt 1) { throw "Le telechargement de l'inventaire est vide." }
+    if ($Data.Length -lt 1) { throw "The inventory download is empty." }
     $HeaderText = [Text.Encoding]::UTF8.GetString($Data, 0, [Math]::Min(250, $Data.Length)).TrimStart()
     if ($HeaderText.StartsWith('<')) {
-        throw "L'URL Analytics a retourne une page HTML (connexion ou page d'erreur) et non un inventaire CSV ou XLSX."
+        throw "The Analytics URL returned an HTML page (login or error) instead of a CSV or XLSX inventory."
     }
     $IsZip = $Data.Length -gt 4 -and $Data[0] -eq 80 -and $Data[1] -eq 75
     if ($IsZip) {
@@ -1012,7 +1012,7 @@ function Get-AutomaticReportSource {
                 return $Destination
             }
             $Candidate = @($Archive.Entries | Where-Object { $_.Name -match '\.(csv|xlsx)$' } | Select-Object -First 1)
-            if ($Candidate.Count -eq 0) { throw 'Le ZIP Analytics ne contient aucun fichier CSV ou XLSX.' }
+            if ($Candidate.Count -eq 0) { throw 'The Analytics ZIP archive contains no CSV or XLSX file.' }
             $Ext = [IO.Path]::GetExtension($Candidate[0].Name).ToLowerInvariant()
             $Destination = Join-Path $ExportRoot ('report-source-auto' + $Ext)
             $InputStream = $Candidate[0].Open()
@@ -1026,13 +1026,13 @@ function Get-AutomaticReportSource {
         }
         finally { $Archive.Dispose() }
     }
-    if ($HeaderText.StartsWith('{')) { throw "L'URL API Analytics n'a pas retourne de fichier apres les redirections de telechargement." }
-    # Pour le mode automatique, l'API Freshservice documente un export CSV.
-    # On confirme aussi que la premiere ligne ressemble a un tableau d'inventaire.
+    if ($HeaderText.StartsWith('{')) { throw "The Analytics API URL did not return a file after download redirects." }
+    # For automatic mode, Freshservice documents CSV exports.
+    # Also check that the first line resembles an inventory table.
     $FirstLine = [Text.Encoding]::UTF8.GetString($Data, 0, [Math]::Min(2000, $Data.Length)) -split '\r?\n' | Select-Object -First 1
     $FirstLineClean = $FirstLine.TrimStart([char]0xFEFF)
     if ($FirstLineClean -notmatch '(?i)(^|[,;\t])\s*"?(id|article[ _]?id|solution[ _]?id)"?\s*([,;\t]|$)') {
-        throw "L'inventaire telecharge n'a pas de colonne ID reconnue. Verifier que le Data Export contient les articles de la Knowledge Base."
+        throw "The downloaded inventory has no recognized ID column. Verify that the Data Export includes Knowledge Base articles."
     }
     $Destination = Join-Path $ExportRoot 'report-source-auto.csv'
     Move-Item -LiteralPath $RawFile -Destination $Destination -Force
@@ -1040,7 +1040,7 @@ function Get-AutomaticReportSource {
 }
 
 # -----------------------------------------------------------------------------
-# Lecture du fichier reporting
+# Reading the reporting file
 # -----------------------------------------------------------------------------
 
 function Normalize-ColumnName {
@@ -1078,7 +1078,7 @@ function Get-HeaderMap {
     )
 
     if ($Rows.Count -eq 0) {
-        throw 'Le fichier source ne contient aucune ligne de données.'
+        throw 'The source file contains no data rows.'
     }
 
     $Properties = @($Rows[0].PSObject.Properties.Name)
@@ -1125,7 +1125,7 @@ function Get-HeaderMap {
 
     if ([string]::IsNullOrWhiteSpace([string]$Map.Id)) {
         $AvailableHeaders = $Properties -join ', '
-        throw "La colonne contenant l'identifiant des articles est absente.`r`n`r`nUne colonne nommée ID, Article ID ou Solution ID est obligatoire.`r`n`r`nColonnes détectées : $AvailableHeaders"
+        throw "The article ID column is missing.`r`n`r`nA column named ID, Article ID, or Solution ID is required.`r`n`r`nDetected columns: $AvailableHeaders"
     }
 
     return $Map
@@ -1223,7 +1223,7 @@ function Get-CsvDelimiter {
     $FirstLine = Get-Content -LiteralPath $Path -TotalCount 1
 
     if ($null -eq $FirstLine) {
-        throw 'Le fichier CSV est vide.'
+        throw 'The CSV file is empty.'
     }
 
     $Candidates = @(
@@ -1235,7 +1235,7 @@ function Get-CsvDelimiter {
     $Selected = $Candidates | Sort-Object Count -Descending | Select-Object -First 1
 
     if ($Selected.Count -le 0) {
-        throw "Le séparateur du fichier CSV n'a pas pu être identifié. Les séparateurs pris en charge sont le point-virgule, la virgule et la tabulation."
+        throw "Unable to detect the CSV delimiter. Supported delimiters are semicolon, comma, and tab."
     }
 
     return [char]$Selected.Character
@@ -1257,7 +1257,7 @@ function Read-CsvSourceRows {
             return @(Import-Csv -LiteralPath $Path -Delimiter $Delimiter -Encoding Default)
         }
         catch {
-            throw "Impossible de lire le fichier CSV.`r`n$($_.Exception.Message)"
+            throw "Unable to read the CSV file.`r`n$($_.Exception.Message)"
         }
     }
 }
@@ -1272,7 +1272,7 @@ function Release-ComObject {
             [void][Runtime.InteropServices.Marshal]::ReleaseComObject($ComObject)
         }
         catch {
-            # La libération explicite est une mesure de sécurité, sans bloquer l'export.
+            # Explicit release is a security measure and does not interrupt the export.
         }
     }
 }
@@ -1293,7 +1293,7 @@ function Read-XlsxSourceRows {
             $Excel = New-Object -ComObject Excel.Application
         }
         catch {
-            throw "Microsoft Excel n'est pas disponible pour lire le fichier XLSX. Enregistrer le reporting au format CSV puis relancer le script, ou exécuter le script sur un poste disposant d'Excel."
+            throw "Microsoft Excel is not available to read XLSX files. Save the report as CSV and restart the script, or run it on a computer with Excel installed."
         }
 
         $Excel.Visible = $false
@@ -1306,7 +1306,7 @@ function Read-XlsxSourceRows {
         $ColumnCount = [int]$UsedRange.Columns.Count
 
         if ($RowCount -lt 2 -or $ColumnCount -lt 1) {
-            throw "La première feuille du fichier XLSX ne contient pas de tableau exploitable."
+            throw "The first worksheet in the XLSX file does not contain a usable table."
         }
 
         $Values = $UsedRange.Value2
@@ -1359,7 +1359,7 @@ function Read-XlsxSourceRows {
                 $Workbook.Close($false)
             }
             catch {
-                # Aucun traitement complémentaire requis.
+                # No further processing is required.
             }
         }
 
@@ -1368,7 +1368,7 @@ function Read-XlsxSourceRows {
                 $Excel.Quit()
             }
             catch {
-                # Aucun traitement complémentaire requis.
+                # No further processing is required.
             }
         }
 
@@ -1397,7 +1397,7 @@ function Read-SourceRows {
             return @(Read-XlsxSourceRows -Path $Path)
         }
         default {
-            throw 'Le fichier source doit être au format CSV ou XLSX.'
+            throw 'The source file must be CSV or XLSX.'
         }
     }
 }
@@ -1429,7 +1429,7 @@ function Get-DeduplicatedSourceArticles {
                     Level      = 'SourceRow'
                     SourceRow  = $SourceRowNumber
                     ArticleId  = $RawId
-                    Error      = "Identifiant absent ou invalide dans le fichier source."
+                    Error      = "Missing or invalid article ID in the source file."
                 }
             )
             continue
@@ -1493,7 +1493,7 @@ function Get-DeduplicatedSourceArticles {
 }
 
 # -----------------------------------------------------------------------------
-# Référentiels catégories et dossiers
+# Category and folder reference data
 # -----------------------------------------------------------------------------
 
 function Get-FolderHierarchyInfo {
@@ -1639,7 +1639,7 @@ function Find-FolderFromSourceNames {
 }
 
 # -----------------------------------------------------------------------------
-# Fichiers de sortie
+# Output files
 # -----------------------------------------------------------------------------
 
 function ConvertTo-SafeFileName {
@@ -1800,10 +1800,10 @@ function New-ArticleHtmlDocument {
         }
         elseif (-not [string]::IsNullOrWhiteSpace($ExternalUrl)) {
             $EncodedUrl = [System.Net.WebUtility]::HtmlEncode($ExternalUrl)
-            $DescriptionHtml = '<p><a href="{0}" target="_blank">Ouvrir la ressource externe</a></p>' -f $EncodedUrl
+            $DescriptionHtml = '<p><a href="{0}" target="_blank">Open external resource</a></p>' -f $EncodedUrl
         }
         else {
-            $DescriptionHtml = "<p>Aucun contenu textuel n'a été retourné par l'API.</p>"
+            $DescriptionHtml = "<p>The API returned no article text.</p>"
         }
     }
 
@@ -1825,7 +1825,7 @@ function New-ArticleHtmlDocument {
 
     return @"
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1873,19 +1873,19 @@ function New-ArticleHtmlDocument {
 
     <div class="metadata">
         <p><strong>Article ID :</strong> $ArticleId</p>
-        <p><strong>Lien Freshservice :</strong> <a href="$FreshserviceLinkEncoded" target="_blank">Ouvrir l'article</a></p>
-        <p><strong>Catégorie :</strong> $CategoryEncoded</p>
-        <p><strong>Dossier :</strong> $FolderEncoded</p>
-        <p><strong>Chemin du dossier :</strong> $FolderPathEncoded</p>
-        <p><strong>Type (reporting) :</strong> $SourceTypeEncoded</p>
-        <p><strong>Statut (reporting) :</strong> $SourceStatusEncoded</p>
-        <p><strong>Auteur (reporting) :</strong> $SourceAuthorEncoded</p>
+        <p><strong>Freshservice link:</strong> <a href="$FreshserviceLinkEncoded" target="_blank">Open article</a></p>
+        <p><strong>Category:</strong> $CategoryEncoded</p>
+        <p><strong>Folder:</strong> $FolderEncoded</p>
+        <p><strong>Folder path:</strong> $FolderPathEncoded</p>
+        <p><strong>Type (report):</strong> $SourceTypeEncoded</p>
+        <p><strong>Status (report):</strong> $SourceStatusEncoded</p>
+        <p><strong>Author (report):</strong> $SourceAuthorEncoded</p>
         <p><strong>Workspace ID :</strong> $WorkspaceId</p>
-        <p><strong>Statut API :</strong> $ApiStatus</p>
-        <p><strong>Type API :</strong> $ApiArticleType</p>
-        <p><strong>Créé le :</strong> $CreatedAt</p>
-        <p><strong>Mis à jour le :</strong> $UpdatedAt</p>
-        <p><strong>Modifié le :</strong> $ModifiedAt</p>
+        <p><strong>API status:</strong> $ApiStatus</p>
+        <p><strong>API type:</strong> $ApiArticleType</p>
+        <p><strong>Created:</strong> $CreatedAt</p>
+        <p><strong>Updated:</strong> $UpdatedAt</p>
+        <p><strong>Modified:</strong> $ModifiedAt</p>
     </div>
 
     <main>
@@ -1976,7 +1976,7 @@ function Export-ObjectsToXlsx {
                 $Workbook.Close($false)
             }
             catch {
-                # Aucun traitement complémentaire requis.
+                # No further processing is required.
             }
         }
 
@@ -1985,7 +1985,7 @@ function Export-ObjectsToXlsx {
                 $Excel.Quit()
             }
             catch {
-                # Aucun traitement complémentaire requis.
+                # No further processing is required.
             }
         }
 
@@ -1999,7 +1999,7 @@ function Export-ObjectsToXlsx {
 }
 
 # -----------------------------------------------------------------------------
-# Export principal
+# Main export
 # -----------------------------------------------------------------------------
 
 function Export-FreshserviceKnowledgeBaseFromReport {
@@ -2029,41 +2029,41 @@ function Export-FreshserviceKnowledgeBaseFromReport {
     }
 
     $ApiBase = "https://$($Configuration.Domain)/api/v2/solutions"
-    Add-ExportLog -LogPath $LogPath -Message "Début de l'export depuis $ApiBase"
+    Add-ExportLog -LogPath $LogPath -Message "Export started from $ApiBase"
     if ($Configuration.SourceMode -eq 'Automatic') {
-        # Ne jamais consigner l'URL Analytics : elle peut contenir un jeton d'acces.
-        Add-ExportLog -LogPath $LogPath -Message 'Source : dernier Data Export Analytics via URL API.'
+        # Never log the Analytics URL: it may contain an access token.
+        Add-ExportLog -LogPath $LogPath -Message 'Source: latest Analytics Data Export via API URL.'
         $Configuration.SourceFile = Get-AutomaticReportSource -Configuration $Configuration -Headers $Headers `
             -ExportRoot $ExportRoot -ProgressWindow $ProgressWindow
     }
     else {
-        Add-ExportLog -LogPath $LogPath -Message "Source : reporting local $($Configuration.SourceFile)"
+        Add-ExportLog -LogPath $LogPath -Message "Source: local reporting file $($Configuration.SourceFile)"
     }
 
     $ExportErrors = New-Object 'System.Collections.Generic.List[object]'
     $ArticleResults = New-Object 'System.Collections.Generic.List[object]'
     $CompleteArticles = New-Object 'System.Collections.Generic.List[object]'
 
-    Update-ProgressWindow -ProgressWindow $ProgressWindow -Message 'Lecture du fichier reporting...'
+    Update-ProgressWindow -ProgressWindow $ProgressWindow -Message 'Reading reporting file...'
     $SourceRows = @(Read-SourceRows -Path $Configuration.SourceFile)
 
     if ($SourceRows.Count -eq 0) {
-        throw 'Le fichier reporting ne contient aucune ligne de données.'
+        throw 'The reporting file contains no data rows.'
     }
 
     $HeaderMap = Get-HeaderMap -Rows $SourceRows
     $SourceArticles = @(Get-DeduplicatedSourceArticles -Rows $SourceRows -HeaderMap $HeaderMap -Errors $ExportErrors)
 
     if ($SourceArticles.Count -eq 0) {
-        throw "Aucun ID d'article valide n'a été trouvé dans le fichier reporting."
+        throw "No valid article IDs were found in the reporting file."
     }
 
-    Add-ExportLog -LogPath $LogPath -Message "Lignes source : $($SourceRows.Count). Articles uniques après déduplication : $($SourceArticles.Count)."
+    Add-ExportLog -LogPath $LogPath -Message "Source rows: $($SourceRows.Count). Unique articles after deduplication: $($SourceArticles.Count)."
 
     $SourceCleanCsvPath = Join-Path -Path $ExportRoot -ChildPath 'source-deduplicated.csv'
     $SourceArticles | Export-Csv -LiteralPath $SourceCleanCsvPath -Delimiter ';' -NoTypeInformation -Encoding UTF8
 
-    Update-ProgressWindow -ProgressWindow $ProgressWindow -Message 'Récupération des catégories Freshservice...'
+    Update-ProgressWindow -ProgressWindow $ProgressWindow -Message 'Retrieving Freshservice categories...'
     $Categories = @(
         Get-FreshservicePagedCollection `
             -BaseUri "$ApiBase/categories" `
@@ -2073,7 +2073,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
             -ProgressWindow $ProgressWindow
     )
 
-    Update-ProgressWindow -ProgressWindow $ProgressWindow -Message 'Récupération de tous les dossiers Freshservice...'
+    Update-ProgressWindow -ProgressWindow $ProgressWindow -Message 'Retrieving all Freshservice folders...'
     $Folders = @(
         Get-FreshservicePagedCollection `
             -BaseUri "$ApiBase/folders" `
@@ -2083,7 +2083,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
             -ProgressWindow $ProgressWindow
     )
 
-    Add-ExportLog -LogPath $LogPath -Message "Catégories récupérées : $($Categories.Count). Dossiers récupérés : $($Folders.Count)."
+    Add-ExportLog -LogPath $LogPath -Message "Categories retrieved: $($Categories.Count). Folders retrieved: $($Folders.Count)."
 
     Write-JsonFile -Data $Categories -Path (Join-Path -Path $ExportRoot -ChildPath 'categories.json')
     Write-JsonFile -Data $Folders -Path (Join-Path -Path $ExportRoot -ChildPath 'folders.json')
@@ -2135,7 +2135,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
                 }
             )
 
-            Add-ExportLog -LogPath $LogPath -Level 'ERROR' -Message "Échec de lecture de l'article $ArticleId : $ErrorMessage"
+            Add-ExportLog -LogPath $LogPath -Level 'ERROR' -Message "Failed to retrieve article $ArticleId: $ErrorMessage"
 
             $ArticleResults.Add(
                 [PSCustomObject]@{
@@ -2267,7 +2267,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
                 }
             )
 
-            Add-ExportLog -LogPath $LogPath -Level 'ERROR' -Message "Échec d'écriture des fichiers de l'article $ArticleId : $FileError"
+            Add-ExportLog -LogPath $LogPath -Level 'ERROR' -Message "Failed to write files for article $ArticleId: $FileError"
             $HtmlPath = $null
             $JsonPath = $null
         }
@@ -2320,7 +2320,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
         Start-Sleep -Milliseconds 80
     }
 
-    Update-ProgressWindow -ProgressWindow $ProgressWindow -Message 'Création des inventaires consolidés...'
+    Update-ProgressWindow -ProgressWindow $ProgressWindow -Message 'Creating consolidated inventories...'
 
     $CleanCsvPath = Join-Path -Path $ExportRoot -ChildPath 'articles-clean.csv'
     $CleanXlsxPath = Join-Path -Path $ExportRoot -ChildPath 'articles-clean.xlsx'
@@ -2332,7 +2332,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
 
     $XlsxCreated = Export-ObjectsToXlsx -Rows $ArticleResults.ToArray() -Path $CleanXlsxPath -WorksheetName 'Articles clean'
     if (-not $XlsxCreated) {
-        Add-ExportLog -LogPath $LogPath -Level 'WARNING' -Message "Le fichier articles-clean.xlsx n'a pas été généré, car Microsoft Excel n'était pas disponible. Le fichier CSV reste disponible."
+        Add-ExportLog -LogPath $LogPath -Level 'WARNING' -Message "articles-clean.xlsx was not created because Microsoft Excel was unavailable. The CSV inventory is available."
     }
 
     if ($ExportErrors.Count -gt 0) {
@@ -2342,7 +2342,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
     $SuccessCount = @($ArticleResults | Where-Object { $_.ApiResult -eq 'Success' }).Count
     $FailureCount = @($ArticleResults | Where-Object { $_.ApiResult -eq 'Error' }).Count
 
-    Add-ExportLog -LogPath $LogPath -Message "Export terminé. Lignes source : $($SourceRows.Count), ID uniques : $($SourceArticles.Count), succès API : $SuccessCount, échecs API : $FailureCount, erreurs totales : $($ExportErrors.Count)."
+    Add-ExportLog -LogPath $LogPath -Message "Export completed. Source rows: $($SourceRows.Count), unique IDs: $($SourceArticles.Count), successful API calls: $SuccessCount, failed API calls: $FailureCount, total errors: $($ExportErrors.Count)."
 
     $Configuration.ApiKey = $null
     $Configuration.BasicPassword = $null
@@ -2364,7 +2364,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
 }
 
 # -----------------------------------------------------------------------------
-# Exécution
+# Execution
 # -----------------------------------------------------------------------------
 
 $Configuration = $null
@@ -2377,23 +2377,23 @@ try {
         exit 0
     }
 
-    # La sauvegarde est optionnelle. Ne jamais la tenter si la case est decochee.
-    # L'echec d'ecriture ou de chiffrement ne bloque jamais l'extraction des articles.
+    # Saving preferences is optional. Never attempt it if the checkbox is cleared.
+    # Failed storage or encryption must never block article extraction.
     if ($Configuration.RememberConfiguration) {
         try {
             $SaveWarnings = @(Save-FreshserviceSettings -Configuration $Configuration)
             if ($SaveWarnings.Count -gt 0) {
-                Show-WarningMessage -Title 'Memorisation partielle' -Message ((@($SaveWarnings) -join "`r`n") + "`r`n`r`nL'export peut continuer sans enregistrer ces informations.")
+                Show-WarningMessage -Title 'Some preferences were not saved' -Message ((@($SaveWarnings) -join "`r`n") + "`r`n`r`nThe export can continue without saving these preferences.")
             }
         }
         catch {
-            Show-WarningMessage -Title 'Preferences non sauvegardees' -Message ("Impossible d'enregistrer les preferences :`r`n" + $_.Exception.Message + "`r`n`r`nL'export peut continuer.")
+            Show-WarningMessage -Title 'Preferences not saved' -Message ("Unable to save preferences:`r`n" + $_.Exception.Message + "`r`n`r`nThe export can continue.")
         }
     }
     else {
         try { Clear-FreshserviceSettings }
         catch {
-            Show-WarningMessage -Title 'Anciennes preferences non supprimees' -Message ("Impossible d'effacer la configuration precedente :`r`n" + $_.Exception.Message + "`r`n`r`nL'export peut continuer.")
+            Show-WarningMessage -Title 'Previous preferences not removed' -Message ("Unable to remove previous preferences:`r`n" + $_.Exception.Message + "`r`n`r`nThe export can continue.")
         }
     }
 
@@ -2406,51 +2406,51 @@ try {
     $ProgressWindow = $null
 
     $XlsxMessage = if ($Result.XlsxCreated) {
-        'Les inventaires CSV et XLSX ont été générés.'
+        'The CSV and XLSX inventories were generated.'
     }
     else {
-        "L'inventaire CSV a été généré. Le fichier XLSX n'a pas pu être créé car Microsoft Excel n'était pas disponible."
+        "The CSV inventory was generated. The XLSX file could not be created because Microsoft Excel was unavailable."
     }
 
     if ($Result.FailureCount -eq 0 -and $Result.ErrorCount -eq 0) {
         $Message = @"
-Export terminé avec succès.
+Export completed successfully.
 
-Lignes du reporting : $($Result.SourceRowCount)
-ID uniques : $($Result.UniqueIdCount)
-Catégories : $($Result.CategoryCount)
-Dossiers : $($Result.FolderCount)
-Articles exportés : $($Result.SuccessCount)
+Reporting rows: $($Result.SourceRowCount)
+Unique IDs: $($Result.UniqueIdCount)
+Categories: $($Result.CategoryCount)
+Folders: $($Result.FolderCount)
+Articles exported: $($Result.SuccessCount)
 
 $XlsxMessage
 
-Dossier :
+Folder:
 $($Result.ExportRoot)
 "@
 
-        Show-InformationMessage -Message $Message -Title 'Export Freshservice terminé'
+        Show-InformationMessage -Message $Message -Title 'Freshservice export completed'
     }
     else {
         $Message = @"
-Export terminé avec des avertissements.
+Export completed with warnings.
 
-Lignes du reporting : $($Result.SourceRowCount)
-ID uniques : $($Result.UniqueIdCount)
-Catégories : $($Result.CategoryCount)
-Dossiers : $($Result.FolderCount)
-Articles exportés : $($Result.SuccessCount)
-Articles en erreur : $($Result.FailureCount)
-Erreurs consignées : $($Result.ErrorCount)
+Reporting rows: $($Result.SourceRowCount)
+Unique IDs: $($Result.UniqueIdCount)
+Categories: $($Result.CategoryCount)
+Folders: $($Result.FolderCount)
+Articles exported: $($Result.SuccessCount)
+Failed articles: $($Result.FailureCount)
+Logged errors: $($Result.ErrorCount)
 
 $XlsxMessage
 
-Dossier :
+Folder:
 $($Result.ExportRoot)
 
-Le détail est disponible dans export-errors.csv et export.log.
+Details are available in export-errors.csv and export.log.
 "@
 
-        Show-WarningMessage -Message $Message -Title 'Export Freshservice terminé avec avertissements'
+        Show-WarningMessage -Message $Message -Title 'Freshservice export completed with warnings'
     }
 
     if ($Configuration.OpenFolder -and (Test-Path -LiteralPath $Result.ExportRoot -PathType Container)) {
@@ -2461,13 +2461,13 @@ catch {
     Close-ProgressWindow -ProgressWindow $ProgressWindow
     $ProgressWindow = $null
 
-    $ErrorMessage = "L'export a échoué.`r`n`r`n$($_.Exception.Message)"
+    $ErrorMessage = "The export failed.`r`n`r`n$($_.Exception.Message)"
 
     if (
         -not [string]::IsNullOrWhiteSpace([string]$script:CurrentExportRoot) -and
         (Test-Path -LiteralPath $script:CurrentExportRoot -PathType Container)
     ) {
-        $ErrorMessage += "`r`n`r`nLes fichiers partiels et le journal sont disponibles dans :`r`n$script:CurrentExportRoot"
+        $ErrorMessage += "`r`n`r`nPartial files and execution logs are available in:`r`n$script:CurrentExportRoot"
     }
 
     Show-ErrorMessage -Message $ErrorMessage
@@ -2480,7 +2480,7 @@ finally {
             $Configuration.BasicPassword = $null
         }
         catch {
-            # Aucun traitement complémentaire requis.
+            # No further processing is required.
         }
     }
 
