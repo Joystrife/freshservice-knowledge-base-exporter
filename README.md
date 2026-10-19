@@ -28,7 +28,7 @@ For complete setup and troubleshooting instructions in French, see the [French u
 
 ## Quick start
 
-1. Download `Freshservice-KnowledgeBase-Exporter.ps1`.
+1. Download `Freshservice-KnowledgeBase-Exporter.ps1` using GitHub's **Raw / Download raw file** action (rather than copy-pasting its contents). Keep its **UTF-8 with BOM** encoding when saving edits; Windows PowerShell 5.1 can misparse UTF-8 files without BOM.
 2. Open Windows PowerShell in the script directory.
 3. Run:
 
