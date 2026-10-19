@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-# Freshservice KB Export v3.4: automatic Analytics inventory and SecureString-protected preferences
+# Freshservice KB Export v3.4.1: automatic Analytics inventory and SecureString-protected preferences
 
 [CmdletBinding()]
 param()
@@ -317,7 +317,7 @@ namespace FreshserviceFolderPicker {
 function Get-ExportConfiguration {
     $Settings = Read-FreshserviceSettings
     $Form = New-Object System.Windows.Forms.Form
-    $Form.Text = 'Freshservice - Knowledge Base Export v3.4'
+    $Form.Text = 'Freshservice - Knowledge Base Export v3.4.1'
     $Form.Size = New-Object System.Drawing.Size(790, 680)
     $Form.StartPosition = 'CenterScreen'
     $Form.FormBorderStyle = 'FixedDialog'
@@ -2135,7 +2135,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
                 }
             )
 
-            Add-ExportLog -LogPath $LogPath -Level 'ERROR' -Message "Failed to retrieve article $ArticleId: $ErrorMessage"
+            Add-ExportLog -LogPath $LogPath -Level 'ERROR' -Message "Failed to retrieve article ${ArticleId}: $ErrorMessage"
 
             $ArticleResults.Add(
                 [PSCustomObject]@{
@@ -2267,7 +2267,7 @@ function Export-FreshserviceKnowledgeBaseFromReport {
                 }
             )
 
-            Add-ExportLog -LogPath $LogPath -Level 'ERROR' -Message "Failed to write files for article $ArticleId: $FileError"
+            Add-ExportLog -LogPath $LogPath -Level 'ERROR' -Message "Failed to write files for article ${ArticleId}: $FileError"
             $HtmlPath = $null
             $JsonPath = $null
         }
