@@ -1,4 +1,4 @@
-# Freshservice Knowledge Base Exporter v3.4 — User Guide
+# Freshservice Knowledge Base Exporter v3.4.2 — User Guide
 
 ## 1. Purpose
 
@@ -132,7 +132,7 @@ Disabling preference storage does not prevent a one-time export.
 | Article-level failure | Check `export-errors.csv` and `export.log`. |
 | Preferences not saved | Export can continue without locally stored settings. |
 
-To check completeness, compare the unique ID count, number of successful exports, and recorded article-level failures.
+To check completeness, compare the unique ID count, the number of **successful API reads**, the number of **HTML and JSON article pairs saved**, and any article-level failures. These counts are distinct: an API request may succeed even if saving the article files fails on Windows. Directory names are sanitized to remove trailing spaces and periods.
 
 ## 10. Maintenance and security
 
