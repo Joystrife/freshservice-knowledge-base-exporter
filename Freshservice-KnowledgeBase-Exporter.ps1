@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # Freshservice KB Export v3.3: mode Analytics automatique + preferences chiffrées via SecureString
 
 [CmdletBinding()]
